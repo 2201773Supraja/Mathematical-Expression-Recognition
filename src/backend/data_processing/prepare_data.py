@@ -2,8 +2,8 @@ import glob
 import xml.etree.ElementTree as ET
 
 import numpy as np
-import cPickle as pickle
-from sklearn.cross_validation import train_test_split
+import pickle
+from sklearn.model_selection import train_test_split
 
 from traces2image import IMAGE_SIZE, traces2image
 
@@ -28,19 +28,38 @@ def load_ground_truth(gt_file):
             ink_id_map[ink_id] = len(y) - 1
     return y, symbol_set, ink_id_map
 
+# ORIGINAL
+# def load_symbol(inkml_file):
+#     ns = "http://www.w3.org/2003/InkML"
+#     tree = ET.parse(inkml_file)
+#     root = tree.getroot()
+#     ink_id = filter(lambda e: e.get('type') == "UI",
+#                      root.findall("{%s}annotation" % ns))[0].text
+#     trace_list = []
+#     for trace in root.iter("{%s}trace" % ns):
+#         stroke = map(lambda x: map(lambda i: int(round(float(i))), x.strip().split(' ')), trace.text.split(','))
+#         trace_list.append(stroke)
+#     return ink_id, trace_list
 
+# NEW (10 Dec)
 def load_symbol(inkml_file):
-    ns = "http://www.w3.org/2003/InkML"
+    """
+    Loads symbol information from an InkML file.
+    """
+    import xml.etree.ElementTree as ET
     tree = ET.parse(inkml_file)
     root = tree.getroot()
-    ink_id = filter(lambda e: e.get('type') == "UI",
-                     root.findall("{%s}annotation" % ns))[0].text
-    trace_list = []
-    for trace in root.iter("{%s}trace" % ns):
-        stroke = map(lambda x: map(lambda i: int(round(float(i))), x.strip().split(' ')), trace.text.split(','))
-        trace_list.append(stroke)
-    return ink_id, trace_list
+    annotations = list(filter(lambda e: e.get('type') == "UI",
+                               root.findall('{http://www.w3.org/2003/InkML}annotation')))
+    ink_id = annotations[0].text if annotations else None
 
+    trace_list = []
+    for trace in root.findall('{http://www.w3.org/2003/InkML}trace'):
+        trace = list(map(lambda x: tuple(map(lambda v: round(float(v)), x.strip().split())), 
+                         trace.text.strip().split(',')))
+        trace_list.append(trace)
+
+    return ink_id, trace_list
 
 def load_int_data(inkml_dir, ink_id_map):
     X = np.empty((len(ink_id_map), IMAGE_SIZE * IMAGE_SIZE))
@@ -72,7 +91,8 @@ if __name__ == "__main__":
     X = load_int_data(DATA_SOURCE, ink_id_map)
 
     sym2num, num2sym = build_symbol_map(symbol_set)
-    y_ = np.zeros((len(y), len(symbol_set)), dtype=np.int)
+    # y_ = np.zeros((len(y), len(symbol_set)), dtype=np.int) # ORIGINAL
+    y_ = np.zeros((len(y), len(symbol_set)), dtype=int)  # Use plain Python int # REPLACED (10 Dec)
     for i, s in enumerate(y):
         y_[i, sym2num[s]] = 1
 
